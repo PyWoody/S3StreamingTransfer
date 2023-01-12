@@ -33,8 +33,8 @@ def main():
   )
   t.start()
    
-   for chunk in simulated_network_iterator(upload_item):
-     file_obj.write(chunk)
+ for chunk in simulated_network_iterator(upload_item):
+   file_obj.write(chunk)
    
    
 def simulated_network_iterator(fname):
