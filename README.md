@@ -5,7 +5,7 @@ A simple class to allow fileobj like streaming uploads to S3 buckets without nee
 
 Simple usage without cached writes:
 
-```
+```python3
 import boto3
 import mimetypes
 import os
@@ -58,7 +58,7 @@ def simulated_network_iterator(fname):
 
 In almost all situations, the data sent to the `file_obj` will outpace the data read from it and processed by `boto3`. In these cases, enhanced generators with buffered writes really shine:
 
-```
+```python3
   def main():
     upload_item = f'/path/to/local_or_networked_file_or_FTP_location'
     file_size = os.stat(upload_item).st_size  # Or whatever is appropriate
