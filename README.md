@@ -135,4 +135,4 @@ def __process(file_obj, extra_args):
         Config=config
     )
 ```
-By using an enhanced generator, you can take advantage of a pre-write cache to cut down on needless calls to the `file_obj`'s `.write` method which requires capturing and release a `Lock()` each time. Yielding back the amount written by the `boto3` `client` will also help the sender track how much data has actually been processed.
+By using an enhanced generator, you can take advantage of a pre-write cache to cut down on needless calls to the `file_obj`'s `.write` method which requires capturing and releasing a `Lock()` each time. Yielding back the amount written by the `boto3` `client` will also help the sender track how much data has actually been processed.
