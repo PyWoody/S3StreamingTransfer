@@ -74,7 +74,7 @@ def main():
             print(f'Uploaded: {processed}bytes ({processed/file_size:.1%})', end='', flush=True)
     written_amount = upload.send(None)
     processed += written_amount
-    print(f'Uploaded: {processed} ({processed/file_size:.%})', flush=True)
+    print(f'Uploaded: {processed} ({processed/file_size:.1%})', flush=True)
     upload.close()
   
 def process(upload_item, callback=None):
