@@ -3,7 +3,7 @@ A simple class to allow fileobj like streaming uploads to S3 buckets without nee
 
 ### Example Usage
 
-Simplue usage without cached writes:
+Simple usage without cached writes:
 
 ```
 import boto3
