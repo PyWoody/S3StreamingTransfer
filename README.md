@@ -116,7 +116,7 @@ def process(upload_item, callback=None):
                 written_amount = 0
     except GeneratorExit as e:
         # Prematurely closed
-        # Do any necessary cleaups
+        # Do any necessary cleanups
         raise e   # Or suppress
     else:
         if callback: callback()
