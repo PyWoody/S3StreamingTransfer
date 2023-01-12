@@ -71,7 +71,7 @@ def main():
     for chunk in simulated_network_iterator(upload_item):
         if written_amount := upload.send(chunk):
             processed += written_amount
-            print(f'Uploaded: {processed}bytes ({processed/file_size:.%})', end='', flush=True)
+            print(f'Uploaded: {processed}bytes ({processed/file_size:.1%})', end='', flush=True)
     written_amount = upload.send(None)
     processed += written_amount
     print(f'Uploaded: {processed} ({processed/file_size:.%})', flush=True)
