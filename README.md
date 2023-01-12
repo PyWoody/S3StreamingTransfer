@@ -30,8 +30,8 @@ def main():
     target=process,
     args=(file_obj, extra_args),
     daemon=True
-   )
-   t.start()
+  )
+  t.start()
    
    for chunk in simulated_network_iterator(upload_item):
      file_obj.write(chunk)
