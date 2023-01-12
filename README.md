@@ -77,7 +77,7 @@ def main():
     print(f'Uploaded: {processed} ({processed/file_size:.1%})', flush=True)
     upload.close()
   
-def process(upload_item, callback=None):
+def upload_generator(upload_item, callback=None):
     file_size = os.stat(upload_item).st_size  # Or whatever is appropriate
     file_obj = S3StreamingObject(file_size)
     c_type, _ = mimetypes.guess_type(upload_item)
