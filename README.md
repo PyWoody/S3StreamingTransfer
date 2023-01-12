@@ -1,5 +1,5 @@
 ## S3StreamingTransfer
-A simple class to allow fileobj like streaming uploads to S3 buckets without needing to write to disk.
+A simple class to allow fileobj like streaming uploads to S3 buckets from memory without needing to write to disk.
 
 ### Example Usage
 
