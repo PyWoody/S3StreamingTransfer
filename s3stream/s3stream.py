@@ -86,28 +86,6 @@ class S3StreamingObject(io.BytesIO):
         with self.lock:
             self.__closed = True
 
-    def prune(self, amount):
-        """
-        Removes the set amount from the current data object
-        used for reading and writing. If the total number of bytes processed
-        at this point is equal to the filesize, closes() is automatically
-        called
-
-        This will be the callback for the upload_fileobj
-
-        :type amount: int
-        :param amount: The number of bytes to remove from the data object
-        """
-        with self.lock:
-            new_data = self.data[amount:]
-            self.data = None
-            self.data = new_data
-            new_data = None
-            self.seek_pos -= amount
-            self.processed += amount
-        if self.processed == self.file_size:
-            self.close()
-
     def write(self, chunk, *args, delay=0.1, max_delay=2.0, **kwargs):
         """
         Writes the new data, chunk, to the internal data object.
@@ -131,35 +109,6 @@ class S3StreamingObject(io.BytesIO):
         with self.lock:
             self.data += chunk
             return len(chunk)
-
-    def tell(self):
-        """
-        Returns the current seek position
-        """
-        with self.lock:
-            return self.seek_pos
-
-    def seek(self, offset, whence=0):
-        """
-        Moves the current seek position as specified by offest and whence.
-
-        This reimplements the standard whence values, as listed below:
-            SEEK_SET or 0 – start of the stream (the default);
-                            offset should be zero or positive
-            SEEK_CUR or 1 – current stream position; offset may be negative
-            SEEK_END or 2 – end of the stream; offset is usually negative
-
-        :rtype: int
-        :return: Returns the new seek position
-        """
-        with self.lock:
-            if whence <= 0 or whence > 2:
-                self.seek_pos = 0 + offset
-            elif whence == 1:
-                self.seek_pos = self.seek_pos + offset
-            elif whence == 2:
-                self.seek_pos = self.file_size + offset
-            return self.seek_pos
 
     def read(self, n, *args, delay=0.1, max_delay=2.0, **kwargs):
         """
@@ -189,3 +138,54 @@ class S3StreamingObject(io.BytesIO):
             delay = delay + 0.1 if delay < max_delay else max_delay
             return self.read(n=n, delay=delay, max_delay=max_delay)
         return output
+
+    def prune(self, amount):
+        """
+        Removes the set amount from the current data object
+        used for reading and writing. If the total number of bytes processed
+        at this point is equal to the filesize, close() is automatically
+        called
+
+        This will be the callback for the upload_fileobj
+
+        :type amount: int
+        :param amount: The number of bytes to remove from the data object
+        """
+        with self.lock:
+            new_data = self.data[amount:]
+            self.data = None
+            self.data = new_data
+            new_data = None
+            self.seek_pos -= amount
+            self.processed += amount
+        if self.processed == self.file_size:
+            self.close()
+
+    def seek(self, offset, whence=0):
+        """
+        Moves the current seek position as specified by offest and whence.
+
+        This reimplements the standard whence values, as listed below:
+            SEEK_SET or 0 – start of the stream (the default);
+                            offset should be zero or positive
+            SEEK_CUR or 1 – current stream position; offset may be negative
+            SEEK_END or 2 – end of the stream; offset is usually negative
+
+        :rtype: int
+        :return: Returns the new seek position
+        """
+        with self.lock:
+            if whence <= 0 or whence > 2:
+                self.seek_pos = 0 + offset
+            elif whence == 1:
+                self.seek_pos = self.seek_pos + offset
+            elif whence == 2:
+                self.seek_pos = self.file_size + offset
+            return self.seek_pos
+
+    def tell(self):
+        """
+        Returns the current seek position
+        """
+        with self.lock:
+            return self.seek_pos
