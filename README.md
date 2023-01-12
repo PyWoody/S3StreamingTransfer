@@ -35,6 +35,9 @@ def main():
    
     for chunk in simulated_network_iterator(upload_item):
         file_obj.write(chunk)
+    
+    file_obj.close()
+    t.join()
    
    
 def simulated_network_iterator(fname):
