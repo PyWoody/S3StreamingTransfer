@@ -18,7 +18,7 @@ from s3stream import S3StreamingObject
 def main():
     upload_item = f'/path/to/local_or_networked_file_or_FTP_location'
     file_size = os.stat(upload_item).st_size  # Or whatever is appropriate
-    fileobj = S3StreamingObject(file_size)
+    file_obj = S3StreamingObject(file_size)
     c_type, _ = mimetypes.guess_type(upload_item)
     if c_type is None:
         c_type = 'application/octet-stream'
@@ -54,7 +54,7 @@ def process(file_obj, extra_args=None):
         'BUCKET_NAME',  # bucket
         'OBJECT_NAME',  # key or filename
         ExtraArgs=extra_args,
-        Callback=fileobj.prune
+        Callback=file_obj.prune
         Config=config
     )
 ```
@@ -131,7 +131,7 @@ def __process(file_obj, extra_args):
         'BUCKET_NAME',  # bucket
         'OBJECT_NAME',  # key or filename
         ExtraArgs=extra_args,
-        Callback=fileobj.prune
+        Callback=file_obj.prune
         Config=config
     )
 ```
