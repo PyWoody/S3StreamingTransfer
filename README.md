@@ -63,7 +63,7 @@ In almost all situations, the data sent to the `file_obj` will outpace the data 
     upload_item = f'/path/to/local_or_networked_file_or_FTP_location'
     file_size = os.stat(upload_item).st_size  # Or whatever is appropriate
     processed = 0
-    upload = upload_generator(file_size)
+    upload = upload_generator(upload_item)
     upload.send(None)
     for chunk in simulated_network_iterator(upload_item):
       if written_amount := upload.send(chunk):
