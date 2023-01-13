@@ -100,7 +100,8 @@ class S3StreamingObject(io.BytesIO):
         self.can_write_event.wait()
         with self.lock:
             self.data += chunk
-            self.can_read_event.set()
+            if not self.can_read_event.is_set():
+                self.can_read_event.set()
             if len(self.data) >= self.buffer_size:
                 self.can_write_event.clear()
             return len(chunk)
@@ -147,9 +148,11 @@ class S3StreamingObject(io.BytesIO):
             new_data = None
             self.seek_pos -= amount
             self.processed += amount
-            self.can_write_event.set()
+            if not self.can_write_event.is_set():
+                self.can_write_event.set()
             if self.processed == self.file_size:
-                self.can_read_event.clear()
+                if self.can_read_event.is_set():
+                    self.can_read_event.clear()
 
     def seek(self, offset, whence=0):
         """
