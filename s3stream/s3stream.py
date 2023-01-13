@@ -1,6 +1,5 @@
 import io
 import threading
-import time
 
 
 class S3StreamingObject(io.BytesIO):
@@ -85,44 +84,36 @@ class S3StreamingObject(io.BytesIO):
         """
         with self.lock:
             self.__closed = True
+            self.can_read_event.set()  # Release waiting reads
 
-    def write(self, chunk, *args, delay=0.1, max_delay=2.0, **kwargs):
+    def write(self, chunk, *args, **kwargs):
         """
         Writes the new data, chunk, to the internal data object.
-        If the current data object is larger than the specified maximum
-        buffer size, it will automatically retry given delay and max_delay
+        Will block until data is smaller than buffer_size
 
         :type chunk: bytes
         :param chunk: The bytes to write the end of the data object
-        :type delay: float
-        :param delay: The amount to sleep, if necessary
-        :type max_delay: float
-        :param max_delay: The maximum amount to sleep, if necessary
 
         :rtype: int
         :return: Returns the amount of bytes written
         """
-        if len(self.data) > self.buffer_size:
-            time.sleep(delay)
-            delay = delay + 0.1 if delay < max_delay else max_delay
-            return self.write(chunk, delay=delay, max_delay=max_delay)
+        self.can_write_event.wait()
         with self.lock:
             self.data += chunk
+            self.can_read_event.set()
+            if len(self.data) >= self.buffer_size:
+                self.can_write_event.clear()
             return len(chunk)
 
-    def read(self, n, *args, delay=0.1, max_delay=2.0, **kwargs):
+    def read(self, n, *args, **kwargs):
         """
         Reads the maximum number number of n-bytes, starting from the current
         seek position. If no bytes are available and the object has not
-        been closed, it will automatically retry given the specified
-        dely and max_delay values
+        been closed, it will block until more bytes have been
+        written or the file has been closed
 
         :type n: int
         :param n: The maximum number of bytes to read
-        :type delay: float
-        :param delay: The amount to sleep, if necessary
-        :type max_delay: float
-        :param max_delay: The maximum amount to sleep, if necessary
 
         :rtype: bytes
         :return: Returns the read bytes or b''
@@ -134,17 +125,15 @@ class S3StreamingObject(io.BytesIO):
             if output != b'' or self.closed:
                 self.seek_pos = current_seek
         if output == b'' and not self.closed:
-            time.sleep(delay)
-            delay = delay + 0.1 if delay < max_delay else max_delay
-            return self.read(n=n, delay=delay, max_delay=max_delay)
+            self.can_read_event.wait()
+            return self.read(n)
         return output
 
     def prune(self, amount):
         """
         Removes the set amount from the current data object
         used for reading and writing. If the total number of bytes processed
-        at this point is equal to the filesize, close() is automatically
-        called
+        at this point is equal to the filesize, the can_read_event is cleared
 
         This will be the callback for the upload_fileobj
 
@@ -158,8 +147,9 @@ class S3StreamingObject(io.BytesIO):
             new_data = None
             self.seek_pos -= amount
             self.processed += amount
-        if self.processed == self.file_size:
-            self.close()
+            self.can_write_event.set()
+            if self.processed == self.file_size:
+                self.can_read_event.clear()
 
     def seek(self, offset, whence=0):
         """
