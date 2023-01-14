@@ -2,24 +2,9 @@ import io
 import threading
 
 
-class S3StreamingObject(io.BytesIO):
-    """
-    A streaming object that can be used with upload_fileobj
-    to allow uploading files directly from memory without having to write
-    to disk.
+class BaseS3StreamingObject(io.BytesIO):
 
-    Requires that the boto3.s3.transfer.TransferConfig used has
-    use_threads set to False, i.e.,
-    config = TransferConfig(user_threads=False)
-    This is to prevent multi-part uploads
-
-    :type file_size: int
-    :param file_size: The filesize of the file object to upload
-    :type: buffer_size: int
-    :param: buffer_size: The maximum buffer size to use in memory
-    """
-
-    def __init__(self, file_size, buffer_size=None):
+    def __init__(self, file_size, buffer_size):
         if buffer_size is None:
             buffer_size = 8 * (1024 * 1024)
         self.buffer_size = buffer_size
@@ -27,20 +12,21 @@ class S3StreamingObject(io.BytesIO):
         self.processed = 0
         self.seek_pos = 0
         self.data = b''
-        self.lock = threading.Lock()
         self.__closed = False
         self.__error = None
+        self.lock = threading.Lock()
+        self.can_write_event = threading.Event()
+        self.can_write_event.set()
+        self.can_read_event = threading.Event()
 
     def __repr__(self):
         return (f'{self.__class__.__name__}'
                 f'({self.file_size}, buffer_size={self.buffer_size})')
 
     def __iter__(self):
-        while True:
-            if data := self.read(self.buffer_size):
-                yield data
-            else:
-                return b''
+        while data := self.read(self.buffer_size):
+            yield data
+        self.close()
 
     @property
     def error(self):
@@ -86,6 +72,38 @@ class S3StreamingObject(io.BytesIO):
             self.__closed = True
             self.can_read_event.set()  # Release waiting reads
 
+    def tell(self, *args, **kwargs):
+        """
+        Returns the current seek position
+        """
+        with self.lock:
+            return self.seek_pos
+
+    def read(self, n, *args, second_read=False, **kwargs):
+        """
+        Reads the maximum number number of n-bytes, starting from the current
+        seek position. If no bytes are available and the object has not
+        been closed, it will block until more bytes have been
+        written or the file has been closed
+
+        :type n: int
+        :param n: The maximum number of bytes to read
+
+        :rtype: bytes
+        :return: Returns the read bytes or b''
+        """
+        self.can_read_event.wait()
+        with self.lock:
+            seek_amount = min([n, len(self.data) - self.seek_pos])
+            current_seek = self.seek_pos + seek_amount
+            output = self.data[self.seek_pos:current_seek]
+            self.seek_pos += current_seek
+        if output == b'':
+            return
+        else:
+            self.prune(len(output))
+            return output
+
     def write(self, chunk, *args, **kwargs):
         """
         Writes the new data, chunk, to the internal data object.
@@ -105,30 +123,6 @@ class S3StreamingObject(io.BytesIO):
             if len(self.data) >= self.buffer_size:
                 self.can_write_event.clear()
             return len(chunk)
-
-    def read(self, n, *args, **kwargs):
-        """
-        Reads the maximum number number of n-bytes, starting from the current
-        seek position. If no bytes are available and the object has not
-        been closed, it will block until more bytes have been
-        written or the file has been closed
-
-        :type n: int
-        :param n: The maximum number of bytes to read
-
-        :rtype: bytes
-        :return: Returns the read bytes or b''
-        """
-        with self.lock:
-            seek_amount = min([n, len(self.data) - self.seek_pos])
-            current_seek = self.seek_pos + seek_amount
-            output = self.data[self.seek_pos:current_seek]
-            if output != b'' or self.closed:
-                self.seek_pos = current_seek
-        if output == b'' and not self.closed:
-            self.can_read_event.wait()
-            return self.read(n)
-        return output
 
     def prune(self, amount):
         """
@@ -150,11 +144,38 @@ class S3StreamingObject(io.BytesIO):
             self.processed += amount
             if not self.can_write_event.is_set():
                 self.can_write_event.set()
-            if self.processed == self.file_size:
-                if self.can_read_event.is_set():
+            if len(self.data) == 0:
+                if self.processed == self.file_size:
+                    # Release the final read for b''
+                    self.can_read_event.set()
+                else:
                     self.can_read_event.clear()
 
-    def seek(self, offset, whence=0):
+    def seek(self, *args, **kwargs):
+        raise NotImplementedError('Must create seek() in a subclass')
+
+
+class S3StreamingUpload(BaseS3StreamingObject):
+    """
+    A streaming object that can be used with upload_fileobj
+    to allow uploading files directly from memory without having to write
+    to disk.
+
+    Requires that the boto3.s3.transfer.TransferConfig used has
+    use_threads set to False, i.e.,
+    config = TransferConfig(user_threads=False)
+    This is to prevent multi-part uploads
+
+    :type file_size: int
+    :param file_size: The filesize of the file object to upload
+    :type: buffer_size: int, None
+    :param: buffer_size: The maximum buffer size to use in memory
+    """
+
+    def __init__(self, file_size, buffer_size=None):
+        super().__init__(file_size, buffer_size)
+
+    def seek(self, offset, whence=0, *args, **kwargs):
         """
         Moves the current seek position as specified by offest and whence.
 
@@ -176,9 +197,44 @@ class S3StreamingObject(io.BytesIO):
                 self.seek_pos = self.file_size + offset
             return self.seek_pos
 
-    def tell(self):
+
+class S3StreamingDownload(BaseS3StreamingObject):
+    """
+    A streaming object that can be used with download_fileobj
+    to allow uploading files directly from memory without having to write
+    to disk.
+
+    Requires that the boto3.s3.transfer.TransferConfig used has
+    use_threads set to False, i.e.,
+    config = TransferConfig(user_threads=False)
+    This is to prevent multi-part uploads
+
+    :type file_size: int
+    :param file_size: The filesize of the file object to upload
+    :type: buffer_size: int, None
+    :param: buffer_size: The maximum buffer size to use in memory
+    """
+
+    def __init__(self, file_size, buffer_size=None):
+        super().__init__(file_size, buffer_size)
+
+    def seek(self, offset, whence=0, *args, **kwargs):
         """
-        Returns the current seek position
+
+        This reimplements the standard whence values, as listed below:
+            SEEK_SET or 0 – start of the stream (the default);
+                            offset should be zero or positive
+            SEEK_CUR or 1 – current stream position; offset may be negative
+            SEEK_END or 2 – end of the stream; offset is usually negative
+
+        :rtype: int
+        :return: Returns the offest as specified by whence whence.
         """
         with self.lock:
-            return self.seek_pos
+            if whence <= 0 or whence > 2:
+                pos = offset
+            elif whence == 1:
+                pos = self.processed + len(self.data) + offset
+            elif whence == 2:
+                pos = self.file_size + offset
+            return pos
