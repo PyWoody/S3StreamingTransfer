@@ -12,13 +12,13 @@ import os
 import threading
 
 from boto3.s3.transfer import TransferConfig
-from s3stream import S3StreamingObject
+from s3stream import S3StreamingUpload
 
 
 def main():
     upload_item = f'/path/to/local_or_networked_file_or_FTP_location'
     file_size = os.stat(upload_item).st_size  # Or whatever is appropriate
-    file_obj = S3StreamingObject(file_size)
+    file_obj = S3StreamingUpload(file_size)
     c_type, _ = mimetypes.guess_type(upload_item)
     if c_type is None:
         c_type = 'application/octet-stream'
@@ -32,10 +32,8 @@ def main():
         daemon=True
     )
     t.start()
-   
     for chunk in simulated_network_iterator(upload_item):
         file_obj.write(chunk)
-    
     file_obj.close()
     t.join()
    
@@ -79,7 +77,7 @@ def main():
   
 def upload_generator(upload_item, callback=None):
     file_size = os.stat(upload_item).st_size  # Or whatever is appropriate
-    file_obj = S3StreamingObject(file_size)
+    file_obj = S3StreamingUpload(file_size)
     c_type, _ = mimetypes.guess_type(upload_item)
     if c_type is None:
         c_type = 'application/octet-stream'
@@ -105,23 +103,20 @@ def upload_generator(upload_item, callback=None):
                 written_amount = file_obj.write(data)
                 file_obj.close()
                 t.join()
-                break
-            data += chunk
-            if len(data) >= min_write_size:
-                written_amount = file_obj.write(data)
-                data = b''
-                if min_write_size < max_write_size:
-                    min_write_size += write_size
             else:
-                written_amount = 0
-    except GeneratorExit as e:
-        # Prematurely closed
-        # Do any necessary cleanups
-        raise e   # Or suppress
-    else:
+                data += chunk
+                if len(data) >= min_write_size:
+                    written_amount = file_obj.write(data)
+                    data = b''
+                    if min_write_size < max_write_size:
+                        min_write_size += write_size
+                else:
+                    written_amount = 0
+    except GeneratorExit:
         if callback: callback()
-    finally:
-        return written_amount
+    except Exception as e:
+        # Do any necessary cleanups
+        raise e
       
 def __process(file_obj, extra_args):
     client = boto3.client('s3')
