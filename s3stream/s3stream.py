@@ -79,7 +79,7 @@ class BaseS3StreamingObject(io.BytesIO):
         with self.lock:
             return self.seek_pos
 
-    def read(self, n, *args, second_read=False, **kwargs):
+    def read(self, n, *args, **kwargs):
         """
         Reads the maximum number number of n-bytes, starting from the current
         seek position. If no bytes are available and the object has not
@@ -190,7 +190,7 @@ class S3StreamingUpload(BaseS3StreamingObject):
         """
         with self.lock:
             if whence <= 0 or whence > 2:
-                self.seek_pos = 0 + offset
+                self.seek_pos = offset
             elif whence == 1:
                 self.seek_pos = self.seek_pos + offset
             elif whence == 2:
