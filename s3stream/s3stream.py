@@ -130,8 +130,6 @@ class BaseS3StreamingObject(io.BytesIO):
         used for reading and writing. If the total number of bytes processed
         at this point is equal to the filesize, the can_read_event is cleared
 
-        This will be the callback for the upload_fileobj
-
         :type amount: int
         :param amount: The number of bytes to remove from the data object
         """
