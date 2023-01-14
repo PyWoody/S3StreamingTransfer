@@ -1,1 +1,1 @@
-from .s3stream import S3StreamingObject
+from .s3stream import S3StreamingUpload, S3StreamingDownload
