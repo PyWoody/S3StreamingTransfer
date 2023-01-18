@@ -79,35 +79,13 @@ class BaseS3StreamingObject(io.BytesIO):
         with self.lock:
             return self.seek_pos
 
-    def read(self, n, *args, **kwargs):
-        """
-        Reads the maximum number number of n-bytes, starting from the current
-        seek position. If no bytes are available and the object has not
-        been closed, it will block until more bytes have been
-        written or the file has been closed
-
-        :type n: int
-        :param n: The maximum number of bytes to read
-
-        :rtype: bytes
-        :return: Returns the read bytes or b''
-        """
-        self.can_read_event.wait()
-        with self.lock:
-            seek_amount = min([n, len(self.data) - self.seek_pos])
-            current_seek = self.seek_pos + seek_amount
-            output = self.data[self.seek_pos:current_seek]
-            self.seek_pos += current_seek
-        if output == b'':
-            return
-        else:
-            self.prune(len(output))
-            return output
+    def read(self, *args, **kwargs):
+        raise NotImplementedError('Must create read() in a subclass')
 
     def write(self, chunk, *args, **kwargs):
         """
         Writes the new data, chunk, to the internal data object.
-        Will block until data is smaller than buffer_size
+        Will reset the can_write_event if data is larger than buffer_size
 
         :type chunk: bytes
         :param chunk: The bytes to write the end of the data object
@@ -127,13 +105,17 @@ class BaseS3StreamingObject(io.BytesIO):
     def prune(self, amount):
         """
         Removes the set amount from the current data object
-        used for reading and writing. If the total number of bytes processed
-        at this point is equal to the filesize, the can_read_event is cleared
+        used for reading and writing.
+
+        If all of the internal data object has been pruned, the can_read_event
+        will be cleared if the total amount processed is less then file_size;
+        else, the can_read_event is set to allow for the final b'' read
 
         :type amount: int
         :param amount: The number of bytes to remove from the data object
         """
         with self.lock:
+            # Dance to ensure everything is gc'd. Probably unnecessary
             new_data = self.data[amount:]
             self.data = None
             self.data = new_data
@@ -164,6 +146,9 @@ class S3StreamingUpload(BaseS3StreamingObject):
     config = TransferConfig(user_threads=False)
     This is to prevent multi-part uploads
 
+    Requires setting `S3StreamingUpload.prune` as the upload_fileobj Callback,
+    as it cannot prune itself.
+
     :type file_size: int
     :param file_size: The filesize of the file object to upload
     :type: buffer_size: int, None
@@ -172,6 +157,28 @@ class S3StreamingUpload(BaseS3StreamingObject):
 
     def __init__(self, file_size, buffer_size=None):
         super().__init__(file_size, buffer_size)
+
+    def read(self, n, *args, **kwargs):
+        """
+        Reads the maximum number number of n-bytes, starting from the current
+        seek position. 
+
+        Does not self-prune the internal data object. You must add
+        `S3StreamingUpload.prune` to the Callback function in upload_fileobj
+
+        :type n: int
+        :param n: The maximum number of bytes to read
+
+        :rtype: bytes
+        :return: Returns the read bytes or b''
+        """
+        self.can_read_event.wait()
+        with self.lock:
+            seek_amount = min([n, len(self.data) - self.seek_pos])
+            current_seek = self.seek_pos + seek_amount
+            output = self.data[self.seek_pos:current_seek]
+            self.seek_pos = current_seek
+        return output
 
     def seek(self, offset, whence=0, *args, **kwargs):
         """
@@ -207,6 +214,10 @@ class S3StreamingDownload(BaseS3StreamingObject):
     config = TransferConfig(user_threads=False)
     This is to prevent multi-part uploads
 
+    Do not set `S3StreamingDownload.prune` as the download_fileobj Callback.
+    The class will handle pruning on reads.
+
+
     :type file_size: int
     :param file_size: The filesize of the file object to upload
     :type: buffer_size: int, None
@@ -215,6 +226,33 @@ class S3StreamingDownload(BaseS3StreamingObject):
 
     def __init__(self, file_size, buffer_size=None):
         super().__init__(file_size, buffer_size)
+
+    def read(self, n, *args, **kwargs):
+        """
+        Reads the maximum number number of n-bytes, starting from the current
+        seek position. 
+
+
+        Will self prune the internal data object. Do not add 
+        `S3StreamingDownload.prune` to the download_fileobj Callback
+
+        :type n: int
+        :param n: The maximum number of bytes to read
+
+        :rtype: bytes
+        :return: Returns the read bytes or None
+        """
+        self.can_read_event.wait()
+        with self.lock:
+            seek_amount = min([n, len(self.data) - self.seek_pos])
+            current_seek = self.seek_pos + seek_amount
+            output = self.data[self.seek_pos:current_seek]
+            self.seek_pos = current_seek
+        if output == b'':
+            # Returning None here signals to S3 that the file is completed
+            return
+        self.prune(len(output))
+        return output
 
     def seek(self, offset, whence=0, *args, **kwargs):
         """
