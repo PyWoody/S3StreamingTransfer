@@ -4,7 +4,7 @@ import threading
 
 class BaseS3StreamingObject(io.BytesIO):
 
-    def __init__(self, file_size, buffer_size):
+    def __init__(self, file_size, buffer_size=None):
         if buffer_size is None:
             buffer_size = 8 * (1024 * 1024)
         self.buffer_size = buffer_size
@@ -155,9 +155,6 @@ class S3StreamingUpload(BaseS3StreamingObject):
     :param: buffer_size: The maximum buffer size to use in memory
     """
 
-    def __init__(self, file_size, buffer_size=None):
-        super().__init__(file_size, buffer_size)
-
     def read(self, n, *args, **kwargs):
         """
         Reads the maximum number number of n-bytes, starting from the current
@@ -223,9 +220,6 @@ class S3StreamingDownload(BaseS3StreamingObject):
     :type: buffer_size: int, None
     :param: buffer_size: The maximum buffer size to use in memory
     """
-
-    def __init__(self, file_size, buffer_size=None):
-        super().__init__(file_size, buffer_size)
 
     def read(self, n, *args, **kwargs):
         """
